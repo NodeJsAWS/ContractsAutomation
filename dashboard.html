@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ContractFlow</title>
+<style>
+:root{--bg:#eef1f4;--ink:#14213d;--mute:#5b6577;--line:#d3d9e1;--card:#fff;--acc:#0f766e;--g:#2f855a;--a:#b7791f;--r:#c53030}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:14px 24px;background:var(--ink);color:#fff;flex-wrap:wrap}
+h1{font-size:18px;margin:0}select,button,input{font:inherit}
+select{padding:6px 8px;border-radius:6px}
+main{padding:24px;max-width:1200px;margin:auto}
+.kpis{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px}.kpi{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 16px}
+.kpi b{font-size:22px;display:block}
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;align-items:start}
+.col{background:#e2e7ed;border-radius:10px;padding:10px}.col h3{margin:2px 4px 10px;font-size:14px}
+.card{background:var(--card);border-radius:8px;padding:10px 12px;margin-bottom:8px;border-left:5px solid var(--g);cursor:pointer}
+.card.amber{border-color:var(--a)}.card.red{border-color:var(--r)}
+.card small{color:var(--mute);display:block}
+.drop{border:2px dashed var(--acc);border-radius:10px;padding:36px;text-align:center;background:#fff}
+.drop.over{background:#e6f4f2}
+button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:8px 14px;cursor:pointer}
+button:disabled{background:#9aa5b5;cursor:not-allowed}button:focus-visible,select:focus-visible{outline:3px solid #f6ad55}
+.detail{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-top:20px}@media(max-width:800px){.detail{grid-template-columns:1fr}}
+.pane{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px}
+textarea{width:100%;min-height:220px;font:13px/1.5 ui-monospace,monospace;border:1px solid var(--line);border-radius:6px;padding:8px}
+.flag{border-left:3px solid var(--r);padding:2px 8px;margin:8px 0}
+.hide{display:none}
+</style></head><body>
+<header><h1>ContractFlow</h1>
+<label>Signed in as <select id="role"><option value="governance">Governance (full access)</option><option value="stakeholder">Stakeholder (view only)</option><option value="vendor">Service provider</option></select></label></header>
+<main>
+<section id="vendor" class="hide"><h2>Send a contract for review</h2>
+<div class="drop" id="drop"><p>Drop a PDF here, or <input type="file" id="file" accept="application/pdf"></p>
+<p><input id="vname" placeholder="Company name"> <button id="send" disabled>Submit contract</button></p><p id="msg" role="status"></p></div></section>
+<section id="gov" class="hide"><h2>Review pipeline</h2><div class="kpis" id="kpis"></div><div class="board" id="board"></div>
+<div class="detail hide" id="detail"><div class="pane"><h3 id="dt"></h3><textarea id="redline" aria-label="Contract text"></textarea>
+<p><button id="save">Save redline</button> <button id="sign">Send for signature</button> <span id="note"></span></p></div>
+<div class="pane"><h3>Flagged clauses</h3><div id="flags"></div><h3>Department sign-off</h3><div id="depts"></div></div></div></section>
+</main>
+<script>
+// Demo data mirrors the API shape. Set API to your backend URL (e.g. http://localhost:8000) to go live.
+const API=null;
+let data=[
+{id:"a1",vendor:"Northwind Cloud",value:240000,risk:62,stage:"In review",due:"7h left",redline:"Vendor accepts unlimited liability.\nContract will auto renew annually.",flags:[{dept:"Legal",clause:"Unlimited liability",rationale:"Exceeds liability cap policy"}],reviews:{Legal:"pending",Marketing:"approved",Sales:"approved",Engineering:"pending",Support:"approved"}},
+{id:"b2",vendor:"Contoso Print",value:18000,risk:12,stage:"Awaiting signature",due:"on track",redline:"Standard services agreement.",flags:[],reviews:{Legal:"approved",Marketing:"approved",Sales:"approved",Engineering:"approved",Support:"approved"}},
+{id:"c3",vendor:"Fabrikam Data",value:90000,risk:38,stage:"OCR complete",due:"20h left",redline:"Exclusive supplier clause.",flags:[{dept:"Sales",clause:"Exclusivity clause",rationale:"Limits other vendors"}],reviews:{Legal:"pending",Sales:"pending"}}];
+const stages=["OCR complete","In review","Awaiting signature","Complete"];
+const $=id=>document.getElementById(id);let cur=null;
+const tone=r=>r>50?"red":r>25?"amber":"";
+function role(){return $("role").value}
+function render(){
+ const r=role();$("vendor").classList.toggle("hide",r!=="vendor");$("gov").classList.toggle("hide",r==="vendor");
+ const edit=r==="governance";$("redline").readOnly=!edit;$("save").disabled=!edit;$("sign").disabled=!edit;
+ $("note").textContent=edit?"":"View only. Governance edits and sends for signature.";
+ $("kpis").innerHTML=`<div class=kpi><b>${data.length}</b>contracts</div><div class=kpi><b>${data.filter(c=>c.risk<=25).length}</b>auto-approvable</div><div class=kpi><b>${data.filter(c=>c.due.includes("left")&&parseInt(c.due)<8).length}</b>near SLA limit</div>`;
+ $("board").innerHTML=stages.map(s=>`<div class=col><h3>${s} (${data.filter(c=>c.stage===s).length})</h3>${data.filter(c=>c.stage===s).sort((a,b)=>b.risk-a.risk).map(c=>`<div class="card ${tone(c.risk)}" tabindex=0 data-id=${c.id}><b>${c.vendor}</b><small>$${c.value.toLocaleString()} · risk ${c.risk} · ${c.due}</small></div>`).join("")||"<small>Nothing here</small>"}</div>`).join("");
+ document.querySelectorAll(".card").forEach(e=>{e.onclick=()=>open(e.dataset.id);e.onkeydown=k=>k.key==="Enter"&&open(e.dataset.id)});
+}
+function open(id){cur=data.find(c=>c.id===id);$("detail").classList.remove("hide");$("dt").textContent=cur.vendor;$("redline").value=cur.redline;
+ $("flags").innerHTML=cur.flags.map(f=>`<div class=flag><b>${f.clause}</b> (${f.dept})<br><small>${f.rationale}</small></div>`).join("")||"<p>No flagged clauses.</p>";
+ $("depts").innerHTML=Object.entries(cur.reviews).map(([d,s])=>`<p>${d}: ${s==="approved"?"Approved":"Pending "}${s==="pending"&&role()==="governance"?`<button data-d=${d}>Approve</button>`:""}</p>`).join("");
+ $("depts").querySelectorAll("button").forEach(b=>b.onclick=()=>{cur.reviews[b.dataset.d]="approved";if(Object.values(cur.reviews).every(v=>v==="approved"))cur.stage="Awaiting signature";render();open(cur.id)});}
+$("save").onclick=()=>{cur.redline=$("redline").value;$("note").textContent="Redline saved."};
+$("sign").onclick=()=>{if(Object.values(cur.reviews).some(v=>v!=="approved")){$("note").textContent="Resolve pending department approvals first.";return}cur.stage="Complete";$("note").textContent="Signature request sent.";render()};
+$("role").onchange=()=>{$("detail").classList.add("hide");render()};
+$("file").onchange=()=>$("send").disabled=!$("file").files.length;
+$("send").onclick=()=>{data.push({id:"n"+Date.now(),vendor:$("vname").value||"New vendor",value:0,risk:20,stage:"OCR complete",due:"24h left",redline:"",flags:[],reviews:{Legal:"pending"}});$("msg").textContent="Received. Governance has been notified and you will see status updates here.";};
+render();
+</script></body></html>
